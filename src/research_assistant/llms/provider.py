@@ -1,30 +1,44 @@
-from typing import Optional
-from langchain.chat_models import ChatOpenAI, ChatGoogleGenerativeAI
-from langchain.schema import BaseMessage
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_deepseek import ChatDeepSeek
+from langchain_anthropic import ChatAnthropic
 
-from ..config import settings
+from research_assistant.config import settings
+from langchain_core.language_models import BaseChatModel
 
-def get_llm(provider: Optional[str] = None) -> BaseMessage:
+def get_llm(provider: str = "openai", model: str | None = None) -> BaseChatModel:
     """
-    Get an LLM instance based on the specified provider.
+    Factory function to get an initialized LangChain chat model.
     """
-    if provider is None:
-        provider = "openai" 
-        
+    provider = provider.lower()
+
     if provider == "openai":
-        return ChatOpenAI(
-            model_name="gpt-4-turbo-preview",
-            temperature=0.7,
-            openai_api_key=settings.OPENAI_API_KEY
-        )
-    elif provider == "gemini":
-        return ChatGoogleGenerativeAI(
-            model="gemini-pro",
-            temperature=0.7,
-            google_api_key=settings.GEMINI_API_KEY
-        )
+        if not settings.openai_api_key:
+            raise ValueError("OpenAI API key not found in settings.")
+        # Use default model if none specified, or pass the specific one
+        model_name = model or "gpt-4o"
+        return ChatOpenAI(api_key=settings.openai_api_key, model=model_name, temperature=0.7) # Example temp
+
+    elif provider == "google" or provider == "gemini":
+        if not settings.google_api_key:
+            raise ValueError("Google API key not found in settings.")
+        model_name = model or "gemini-1.5-pro" # Default Gemini model
+        return ChatGoogleGenerativeAI(google_api_key=settings.google_api_key, model=model_name, temperature=0.7)
+
     elif provider == "deepseek":
-        # Note: Implement DeepSeek integration when available
-        raise NotImplementedError("DeepSeek integration not yet available")
+        if not settings.deepseek_api_key:
+            raise ValueError("Deepseek API key not found in settings.")
+        model_name = model or "deepseek-chat" # Check actual model names
+        return ChatDeepSeek(api_key=settings.deepseek_api_key, model_name=model_name, temperature=0.7)
+
+    elif provider == "anthropic":
+        if not settings.anthropic_api_key:
+            raise ValueError("Anthropic API key not found in settings.")
+        model_name = model or "claude-3-sonnet-20240229" # Example Claude model
+        return ChatAnthropic(api_key=settings.anthropic_api_key, model_name=model_name, temperature=0.7)
+
     else:
-        raise ValueError(f"Unsupported LLM provider: {provider}") 
+        raise ValueError(f"Unsupported LLM provider: {provider}")
+
+# Example: Get the default LLM
+# default_llm = get_llm()

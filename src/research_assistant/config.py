@@ -1,53 +1,38 @@
-from typing import Optional
+import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
-from enum import Enum
 
+# Load environment variables from .env file
 load_dotenv()
 
-class LLMProvider(str, Enum):
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    DEEPSEEK = "deepseek"
-    GEMINI = "gemini"
-
 class Settings(BaseSettings):
-    # API Keys
-    OPENAI_API_KEY: Optional[str] = None
-    ANTHROPIC_API_KEY: Optional[str] = None
-    DEEPSEEK_API_KEY: Optional[str] = None
-    GEMINI_API_KEY: Optional[str] = None
-    
-    # LLM Configuration
-    DEFAULT_LLM_PROVIDER: LLMProvider = LLMProvider.DEEPSEEK
-    DEFAULT_MODEL: str = "deepseek-chat"
-    
-    # ChromaDB Configuration
-    CHROMA_HOST: str = "localhost"
-    CHROMA_PORT: int = 8000
-    CHROMA_PERSIST_DIR: str = "./data/chroma"
-    
-    # FastAPI Configuration
-    API_HOST: str = "0.0.0.0"
-    API_PORT: int = 8000
-    DEBUG: bool = False
-    
-    # Web Search Configuration
-    SEARX_URL: str = "https://searx.be"  # Default to a public instance
-    
-    # Langsmit Configuration
-    LANGSMIT_API_KEY: Optional[str] = None
-    LANGSMIT_PROJECT_ID: Optional[str] = None
-    
-    # Langsmith Configuration
-    LANGCHAIN_API_KEY: str
-    LANGCHAIN_PROJECT: str
-    
-    # Application Settings
-    LOG_LEVEL: str = "INFO"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # Langsmith
+    langchain_tracing_v2: str = os.getenv("LANGCHAIN_TRACING_V2", "true")
+    langchain_endpoint: str | None = os.getenv("LANGCHAIN_ENDPOINT")
+    langchain_api_key: str | None = os.getenv("LANGCHAIN_API_KEY")
+    langchain_project: str | None = os.getenv("LANGCHAIN_PROJECT", "Automated Research Assistant")
 
-settings = Settings() 
+    # LLM API Keys (Load keys securely)
+    openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
+    google_api_key: str | None = os.getenv("GOOGLE_API_KEY")
+    deepseek_api_key: str | None = os.getenv("DEEPSEEK_API_KEY")
+    anthropic_api_key: str | None = os.getenv("ANTHROPIC_API_KEY")
+
+    # App Specific
+    chroma_path: str = os.getenv("CHROMA_PATH", "./chroma_db")
+    searx_instance_url: str = os.getenv("SEARX_INSTANCE_URL", "http://localhost:8080") # Default for local SearxNG
+
+    class Config:
+        env_file = '.env'
+        env_file_encoding = 'utf-8'
+
+# Create a single settings instance for the application
+settings = Settings()
+
+# Configure Langsmith client based on settings
+# This ensures Langsmith is ready when modules are imported
+if settings.langchain_api_key:
+    print("Langsmith tracing enabled.")
+
+else:
+    print("Langsmith API key not found. Tracing disabled.")

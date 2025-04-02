@@ -1,33 +1,15 @@
-from typing import Generator
+from research_assistant.memory.chroma_store import ChromaSessionStore, session_store
+from fastapi import HTTPException, status
 
-from fastapi import Depends
-from .endpoints.query import QueryRequest, QueryResponse
+# Dependency to get the global session store instance
+def get_session_store() -> ChromaSessionStore:
+    return session_store
 
-from ..assistant.workflow import ResearchWorkflow
-from ..memory.chroma_store import ChromaStore
-from ..config import settings
-
-def get_memory_store() -> Generator[ChromaStore, None, None]:
-    """
-    Dependency to get the ChromaDB memory store instance.
-    """
-    store = ChromaStore(
-        host=settings.CHROMA_HOST,
-        port=settings.CHROMA_PORT
-    )
-    try:
-        yield store
-    finally:
-        store.close()
-
-def get_workflow(
-    memory_store: ChromaStore = Depends(get_memory_store)
-) -> Generator[ResearchWorkflow, None, None]:
-    """
-    Dependency to get the research workflow instance.
-    """
-    workflow = ResearchWorkflow(memory_store=memory_store)
-    try:
-        yield workflow
-    finally:
-        workflow.cleanup() 
+# Example: Dependency to validate session ID (optional)
+# async def validate_session_id(session_id: str) -> str:
+#     # Basic validation logic (e.g., check format or existence if needed)
+#     if not session_id or len(session_id) < 5: # Arbitrary length check
+#         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Session ID format")
+#     # You could potentially check if the session exists in ChromaDB here,
+#     # but it might add latency. Often done within the endpoint logic.
+#     return session_id

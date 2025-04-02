@@ -1,71 +1,73 @@
-from typing import List, Dict
 import httpx
-from bs4 import BeautifulSoup
-import json
+from research_assistant.config import settings
+from langchain.tools import tool
+import logging
+from research_assistant.schemas.agent_io import SearchResult
+from typing import List
 
-from ...config import settings
+logger = logging.getLogger(__name__)
 
-class WebSearchTool:
-    def __init__(self):
-        self.searx_url = settings.SEARX_URL
-        self.client = httpx.AsyncClient()
-        
-    async def search(self, query: str) -> List[Dict]:
-        """
-        Perform a web search using Searx.
-        """
-        try:
-            # Construct search URL
-            search_url = f"{self.searx_url}/search"
-            params = {
-                "q": query,
-                "format": "json",
-                "pageno": 1,
-                "max_results": 10
-            }
-            
-            # Make request
-            response = await self.client.get(search_url, params=params)
-            response.raise_for_status()
-            
-            # Parse results
-            results = response.json()
-            return self._process_results(results)
-            
-        except Exception as e:
-            print(f"Error performing web search: {str(e)}")
-            return []
-            
-    def _process_results(self, results: Dict) -> List[Dict]:
-        """
-        Process and clean search results.
-        """
-        processed_results = []
-        
-        for result in results.get("results", []):
-            # Extract content
-            content = self._extract_content(result.get("content", ""))
-            
-            processed_results.append({
-                "title": result.get("title", ""),
-                "url": result.get("url", ""),
-                "content": content
+@tool # LangChain tool decorator
+def perform_web_search(query: str) -> List[Dict[str, str]]:
+    """
+    Performs a web search using a SearxNG instance and returns formatted results.
+
+    Args:
+        query: The search query string.
+
+    Returns:
+        A list of dictionaries, each containing 'title', 'url', and 'snippet' of a search result.
+        Returns an empty list if the search fails or no results are found.
+    """
+    if not settings.searx_instance_url:
+        logger.error("Searx instance URL is not configured.")
+        return [{"error": "Search tool not configured."}]
+
+    search_url = f"{settings.searx_instance_url}/search"
+    params = {
+        "q": query,
+        "format": "json",  # Request JSON format
+        "engines": "google,bing", # Example: specify engines (check your Searx config)
+        # Add other params like language if needed: 'language': 'en'
+    }
+    headers = {"Accept": "application/json"}
+
+    try:
+        with httpx.Client(timeout=10.0) as client: # Sync client
+            response = client.get(search_url, params=params, headers=headers)
+            response.raise_for_status() # Raise exception for bad status codes (4xx or 5xx)
+
+        data = response.json()
+        results = data.get("results", [])
+
+        formatted_results = []
+        for result in results[:5]: # Limit to top 5 results
+            formatted_results.append({
+                "title": result.get("title", "No Title"),
+                "url": result.get("url", "#"),
+                "snippet": result.get("content", "No snippet available.") # Searx often uses 'content' for snippet
             })
-            
-        return processed_results
-    
-    def _extract_content(self, html_content: str) -> str:
-        """
-        Extract clean text content from HTML.
-        """
-        try:
-            soup = BeautifulSoup(html_content, "html.parser")
-            return soup.get_text(separator=" ", strip=True)
-        except Exception:
-            return html_content
-    
-    async def close(self):
-        """
-        Close the HTTP client.
-        """
-        await self.client.aclose() 
+
+        if not formatted_results:
+            logger.warning(f"No search results found for query: {query}")
+            return [{"message": "No results found."}]
+
+        logger.info(f"Web search successful for query: '{query}', returned {len(formatted_results)} results.")
+        # Return list of dicts, can be easily serialized/used
+        return formatted_results
+
+    except httpx.RequestError as e:
+        logger.error(f"Error during web search request to {search_url}: {e}")
+        return [{"error": f"Search request failed: {e}"}]
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Searx instance returned error status {e.response.status_code}: {e.response.text}")
+        return [{"error": f"Search service error: Status {e.response.status_code}"}]
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during web search: {e}")
+        return [{"error": f"Unexpected search error: {e}"}]
+
+
+if __name__ == "__main__":
+    test_query = "LangGraph applications"
+    search_results = perform_web_search.invoke({"query": test_query})
+    print(search_results)

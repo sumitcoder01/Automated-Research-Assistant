@@ -1,24 +1,14 @@
-from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Optional
 
 class QueryRequest(BaseModel):
     query: str
-    session_id: Optional[str] = None
-
-class Citation(BaseModel):
-    source: str
-    url: str
-    snippet: str
-
-class Finding(BaseModel):
-    category: str
-    content: str
-    citations: List[Citation]
+    session_id: str # Require session ID for context
+    llm_provider: Optional[str] = "deepseek"
+    llm_model: Optional[str] = "deepseek-chat" # Specific model
 
 class QueryResponse(BaseModel):
-    query_id: str
-    summary: str
-    findings: List[Finding]
-    citations: List[Citation]
-    created_at: datetime = datetime.utcnow() 
+    session_id: str
+    query: str
+    response: str
+    debug_info: Optional[dict] = None # For potential intermediate results

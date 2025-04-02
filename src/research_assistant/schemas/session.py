@@ -1,14 +1,14 @@
-from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import uuid
 
-class SessionCreate(BaseModel):
-    name: str
-    created_at: datetime = datetime.utcnow()
+class SessionCreateRequest(BaseModel):
+    # Optionally allow client to suggest an ID, otherwise generate one
+    session_id: str | None = None
 
 class SessionResponse(BaseModel):
     session_id: str
-    name: str
-    created_at: datetime
-    last_activity: Optional[datetime] = None
-    query_count: int = 0 
+    message: str
+
+class SessionHistory(BaseModel):
+    session_id: str
+    history: list[dict] # e.g., [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]

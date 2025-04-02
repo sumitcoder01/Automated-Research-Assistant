@@ -1,80 +1,86 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Dict, List, Optional, Any
 import uvicorn
+from fastapi import FastAPI
+import logging.config
+import os
 
-from .orchestrator import ResearchOrchestrator
-from .memory import MemoryStore
-from .config import settings
+# --- Logging Configuration (Basic Example) ---
+# For more robust logging, consider a dictionary config or external file
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
+# Apply Langsmith configuration by importing config first
+# This ensures environment variables for Langsmith are set early
+try:
+    from research_assistant.config import settings
+    # The print statement about Langsmith status is in config.py
+except ImportError as e:
+    logger.error(f"Failed to import settings, configuration might be incomplete: {e}")
+    # Handle missing config gracefully or exit if critical
+    settings = None # Indicate settings are missing
+
+# Import API routers AFTER config is potentially loaded
+try:
+    from research_assistant.api.endpoints import query, session
+except ImportError as e:
+     logger.error(f"Failed to import API endpoints: {e}")
+     # Decide how to handle this - maybe the app can't start
+
+
+# --- Initialize FastAPI App ---
 app = FastAPI(
-    title="Automated Research Assistant",
-    description="A multi-agent system for automated research and analysis",
-    version="1.0.0"
+    title="Automated Research Assistant API",
+    description="API for the multi-agent research assistant using LangGraph and Langsmith.",
+    version="0.1.0",
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# --- Include API Routers ---
+# Check if routers were imported successfully before including
+if 'sessions' in locals() and session.router:
+    app.include_router(session.router)
+    logger.info("Included session router.")
+else:
+    logger.warning("Session router not included.")
 
-# Initialize components
-orchestrator = ResearchOrchestrator()
-memory = MemoryStore()
+if 'query' in locals() and query.router:
+    app.include_router(query.router)
+    logger.info("Included query router.")
+else:
+    logger.warning("Query router not included.")
 
-class QueryRequest(BaseModel):
-    query: str
-    session_id: Optional[str] = None
-    llm_provider: Optional[str] = None
-    model: Optional[str] = None
 
-class QueryResponse(BaseModel):
-    session_id: str
-    results: List[Dict[str, Any]]
+# --- Root Endpoint ---
+@app.get("/", tags=["Status"])
+async def read_root():
+    """Basic status check endpoint."""
+    return {"status": "Automated Research Assistant API is running!"}
 
-@app.post("/api/query", response_model=QueryResponse)
-async def process_query(request: QueryRequest):
-    """Process a research query."""
-    try:
-        result = await orchestrator.process_query(
-            query=request.query,
-            session_id=request.session_id,
-            llm_provider=request.llm_provider,
-            model=request.model
-        )
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# --- Startup / Shutdown Events (Optional) ---
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Application startup...")
+    # Initialize any resources if needed (e.g., database connections if not handled by client libraries)
+    if not settings:
+         logger.critical("Settings could not be loaded. Application might not function correctly.")
+    # Ensure ChromaDB path exists? (PersistentClient usually handles this)
+    chroma_dir = getattr(settings, 'chroma_path', './chroma_db')
+    os.makedirs(chroma_dir, exist_ok=True)
+    logger.info(f"Ensured ChromaDB directory exists: {chroma_dir}")
+    logger.info("Application startup complete.")
 
-@app.get("/api/sessions/{session_id}")
-async def get_session(session_id: str):
-    """Get a session by ID."""
-    session = await memory.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("Application shutdown...")
+    # Clean up resources if needed
+    logger.info("Application shutdown complete.")
 
-@app.get("/api/sessions/{session_id}/history")
-async def get_session_history(session_id: str, limit: int = 10):
-    """Get the interaction history for a session."""
-    history = await memory.get_session_history(session_id, limit)
-    return history
 
-@app.get("/api/sessions/search")
-async def search_sessions(query: str, limit: int = 5):
-    """Search for sessions based on their interaction history."""
-    sessions = await memory.search_sessions(query, limit)
-    return sessions
-
+# --- Run with Uvicorn (for local development) ---
 if __name__ == "__main__":
+    logger.info("Starting Uvicorn server...")
     uvicorn.run(
-        "main:app",
-        host=settings.API_HOST,
-        port=settings.API_PORT,
-        reload=settings.DEBUG
-    ) 
+        "research_assistant.main:app", # Point to the FastAPI app instance
+        host="0.0.0.0",
+        port=8000,
+        reload=True, # Enable auto-reload for development
+        log_level="info" # Uvicorn's log level
+        )
