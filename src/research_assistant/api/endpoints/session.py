@@ -1,14 +1,11 @@
- from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from research_assistant.schemas.session import SessionCreateRequest, SessionResponse, SessionHistory
-from research_assistant.memory.chroma_store import ChromaSessionStore
-from research_assistant.api.deps import get_session_store
+from research_assistant.memory import ChromaSessionStore
+from src.research_assistant.api.deps import get_session_store
 import uuid
 import logging
 
-router = APIRouter(
-    prefix="/sessions",
-    tags=["Session Management"]
-)
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)

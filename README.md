@@ -31,13 +31,18 @@ cd automated-research-assistant
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
+3. Build Project 
 
-3. Install dependencies:
+```bash
+pip install -e .
+```
+
+4. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
+5. Set up environment variables:
 ```bash
 cp .env.example .env
 # Edit .env with your API keys and configuration

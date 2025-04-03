@@ -1,5 +1,5 @@
 import logging
-from research_assistant.assistant.tools.web_search import perform_web_search
+from research_assistant.tools.web_search import perform_web_search
 from research_assistant.assistant.graph.state import GraphState
 
 logger = logging.getLogger(__name__)

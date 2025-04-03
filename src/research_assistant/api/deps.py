@@ -1,4 +1,4 @@
-from research_assistant.memory.chroma_store import ChromaSessionStore, session_store
+from research_assistant.memory import ChromaSessionStore, session_store
 from fastapi import HTTPException, status
 
 # Dependency to get the global session store instance

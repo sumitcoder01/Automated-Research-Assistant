@@ -1,20 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from research_assistant.schemas.query import QueryRequest, QueryResponse
-from research_assistant.memory.chroma_store import ChromaSessionStore
+from research_assistant.memory import ChromaSessionStore
 from research_assistant.api.deps import get_session_store
-from research_assistant.assistant.graph.workflow import graph_app # Import compiled graph
+from research_assistant.assistant.workflow import graph_app # Import compiled graph
 from research_assistant.assistant.graph.state import GraphState
 from langchain_core.messages import HumanMessage, AIMessage
 import logging
 import json # For safe printing of potentially complex state
 
-router = APIRouter(
-    prefix="/query",
-    tags=["Research Query"]
-)
+router = APIRouter(tags=["Research Query"])
 logger = logging.getLogger(__name__)
 
-@router.post("", response_model=QueryResponse)
+@router.post("/", response_model=QueryResponse)
 async def handle_query(
     request: QueryRequest,
     store: ChromaSessionStore = Depends(get_session_store)

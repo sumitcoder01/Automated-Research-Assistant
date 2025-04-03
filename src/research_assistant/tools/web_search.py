@@ -3,7 +3,7 @@ from research_assistant.config import settings
 from langchain.tools import tool
 import logging
 from research_assistant.schemas.agent_io import SearchResult
-from typing import List
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 

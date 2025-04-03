@@ -1,7 +1,7 @@
 import logging
 from langgraph.graph import StateGraph, END
 from research_assistant.assistant.graph.state import GraphState
-from research_assistant.assistant.agents import summarizer, search_agent
+from research_assistant.agents import summarizer, search_agent
 from research_assistant.llms.provider import get_llm
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -114,6 +114,9 @@ def create_graph():
     workflow.add_edge("summarize", END)
 
     # Compile the graph
-    app = workflow.compile()
+    graph_app  = workflow.compile()
     logger.info("LangGraph workflow compiled.")
-    return app
+    return graph_app 
+
+
+graph_app = create_graph()

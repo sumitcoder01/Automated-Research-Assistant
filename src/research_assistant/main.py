@@ -33,20 +33,9 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# --- Include API Routers ---
-# Check if routers were imported successfully before including
-if 'sessions' in locals() and session.router:
-    app.include_router(session.router)
-    logger.info("Included session router.")
-else:
-    logger.warning("Session router not included.")
-
-if 'query' in locals() and query.router:
-    app.include_router(query.router)
-    logger.info("Included query router.")
-else:
-    logger.warning("Query router not included.")
-
+# --- API Router ---
+app.include_router(session.router, prefix="/api/v1/sessions")
+app.include_router(query.router, prefix="/api/v1/query")
 
 # --- Root Endpoint ---
 @app.get("/", tags=["Status"])
@@ -78,7 +67,7 @@ async def shutdown_event():
 if __name__ == "__main__":
     logger.info("Starting Uvicorn server...")
     uvicorn.run(
-        "research_assistant.main:app", # Point to the FastAPI app instance
+        "src.research_assistant.main:app", # Point to the FastAPI app instance
         host="0.0.0.0",
         port=8000,
         reload=True, # Enable auto-reload for development
