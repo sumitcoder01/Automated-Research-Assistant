@@ -20,7 +20,10 @@ class Settings(BaseSettings):
 
     # App Specific
     chroma_path: str = os.getenv("CHROMA_PATH", "./chroma_db")
-    searx_instance_url: str = os.getenv("SEARX_INSTANCE_URL", "http://localhost:8080") # Default for local SearxNG
+
+    # Search API Key
+    tavily_api_key: str | None = os.getenv("TAVILY_API_KEY")
+
 
     class Config:
         env_file = '.env'
