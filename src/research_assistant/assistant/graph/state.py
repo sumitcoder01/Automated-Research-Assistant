@@ -1,39 +1,29 @@
+# src/research_assistant/assistant/graph/state.py
+
 from typing import TypedDict, List, Optional, Dict, Any
 from langchain_core.messages import BaseMessage
 
 class GraphState(TypedDict):
     """
     Represents the state of our graph.
-
-    Attributes:
-        query: The initial user query.
-        session_id: The unique ID for the current session.
-        llm_provider: The selected LLM provider.
-        llm_model: The specific LLM model.
-        messages: List of messages in the current conversation flow.
-        search_results: Results from the web search tool.
-        summary: Generated summary of content.
-        category: Assigned category for the research topic.
-        analysis: Results of analysis agent.
-        report: The final generated report content.
-        error: Optional error message if a node fails.
-        next_node: Hint for the router (optional).
     """
+    # Input/Config
     query: str
     session_id: str
     llm_provider: str
     llm_model: Optional[str]
+    embedding_provider: str # Track for memory consistency
 
-    # Conversation history or intermediate messages for the current run
-    messages: List[BaseMessage]
+    # Conversation flow
+    messages: List[BaseMessage] # Appended during the process
 
-    # Agent outputs
+    # Agent Outputs / Intermediate results
+    search_query: Optional[str] # Potentially refined query for search
     search_results: Optional[List[Dict[str, Any]]]
     summary: Optional[str]
-    category: Optional[str]
-    analysis: Optional[str]
-    report: Optional[str]
+    final_response: Optional[str] # The final generated answer for the user
 
-    # Control flow and errors
+    # Control Flow
+    # Decide next step: 'generate_direct_response', 'needs_search', 'synthesize_response'
+    next_step: Optional[str]
     error: Optional[str]
-    next_node: Optional[str] # Explicit hint for next step if needed

@@ -71,7 +71,7 @@ def summarize_node(state: GraphState) -> dict:
         return summary_update # Return immediately
 
     # 2. Get LLM Instance
-    provider = state.get("llm_provider", "openai") # Use default if not specified
+    provider = state.get("llm_provider", "deepseek") # Use default if not specified
     model = state.get("llm_model")
     try:
         llm = get_llm(provider=provider, model=model)

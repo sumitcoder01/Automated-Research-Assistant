@@ -4,8 +4,9 @@ from typing import Optional
 class QueryRequest(BaseModel):
     query: str
     session_id: str # Require session ID for context
-    llm_provider: Optional[str] = "deepseek"
-    llm_model: Optional[str] = "deepseek-chat" # Specific model
+    llm_provider: str
+    llm_model: Optional[str] = None
+    embedding_provider: Optional[str] = "google"
 
 class QueryResponse(BaseModel):
     session_id: str
