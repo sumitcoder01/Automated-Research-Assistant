@@ -1,0 +1,18 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "src/research_assistant/main.py",
+        "use": "@vercel/python",
+        "config": {
+           "maxLambdaSize": "100mb"
+         }
+      }
+    ],
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "src/research_assistant/main.py"
+      }
+    ]
+  }
