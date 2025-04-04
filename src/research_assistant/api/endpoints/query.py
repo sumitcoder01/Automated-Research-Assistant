@@ -24,7 +24,7 @@ async def handle_query(
     user_query = request.query
     # Determine the embedding provider based on the llm_provider field
     # Or use request.embedding_provider if you added that field to the schema
-    embedding_provider_for_session = request.llm_provider or "google" # Default to google
+    embedding_provider_for_session = request.embedding_provider or "google" # Default to google
 
     logger.info(f"Received query for session {session_id} (LLM: {request.llm_provider}, Embeddings: {embedding_provider_for_session}): '{user_query[:50]}...'")
 
