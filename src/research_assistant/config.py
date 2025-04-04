@@ -19,7 +19,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = os.getenv("ANTHROPIC_API_KEY")
 
     # App Specific
+    memory_provider: str = os.getenv("MEMORY_PROVIDER", "pinecone")
+
     chroma_path: str = os.getenv("CHROMA_PATH", "./chroma_db")
+
+    # Pinecone Settings
+    pinecone_api_key: str | None = os.getenv("PINECONE_API_KEY")
+    pinecone_environment: str | None = os.getenv("PINECONE_ENVIRONMENT")
+    pinecone_index_name: str = os.getenv("PINECONE_INDEX_NAME", "research-assistant-sessions")
 
     # Search API Key
     tavily_api_key: str | None = os.getenv("TAVILY_API_KEY")

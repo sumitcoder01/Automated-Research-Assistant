@@ -15,3 +15,5 @@ langsmith>=0.1.0
 httpx>=0.25.1
 pytest>=7.4.3
 tavily-python>=0.5.4
+langchain-pinecone>=0.2.4
+pinecone-client>=6.0.0
