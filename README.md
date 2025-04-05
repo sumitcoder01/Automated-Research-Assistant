@@ -6,7 +6,7 @@ An intelligent research assistant powered by multiple LLM agents working togethe
 
 - Multi-agent architecture using LangGraph
 - Web search integration via Tavily
-- Persistent memory using ChromaDB
+- Persistent memory using ChromaDB and Pinecone
 - Support for multiple LLM providers (OpenAI, Google Gemini, DeepSeek, anthropic)
 - FastAPI-based REST API
 - Comprehensive test suite
@@ -15,14 +15,15 @@ An intelligent research assistant powered by multiple LLM agents working togethe
 
 - Python 3.9+
 - Virtual environment (recommended)
-- API keys for LLM providers (e.g., OpenAI, Gemini, DeepSeek)
+- API keys for LLM providers (e.g., OpenAI, Gemini, DeepSeek, anthropic)
 - API key for Tavily (for web search functionality)
+- API key for Pinecone (for vector database)
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/automated-research-assistant.git
+   git clone https://github.com/sumitcoder01/Automated-Research-Assistant.git
    cd automated-research-assistant
    ```
 
@@ -173,7 +174,7 @@ automated-research-assistant/
 │       ├── assistant/       # Multi-agent workflows
 │       ├── llms/            # LLM provider management
 │       ├── tools/           # External tools for LLM
-│       ├── memory/          # ChromaDB integration
+│       ├── memory/          # ChromaDB and Pinecone integration
 │       ├── prompts/         # Prompt templates
 │       ├── schemas/         # Pydantic models
 └── requirements.txt/        # Required Libraries
