@@ -16,37 +16,44 @@ def analyze_query_node(state: GraphState) -> dict:
     model = state.get("llm_model")
 
     # System prompt to guide the LLM's decision
-    system_prompt = """You are the supervisor of a research assistant system. Your job is to analyze the user's query and the conversation history.
-    Determine the best course of action:
-    1.  **Answer Directly:** If the query is conversational (e.g., greeting) or requests information you likely already know or can infer from the history.
-    2.  **Needs Search:** If the query requires real-time information, specific research data (like papers), or knowledge beyond your internal capabilities.
+    system_prompt = """You are the supervisor agent in a research assistant system. Your *critical task* right now is to analyze the **latest user query** and determine if it requires external information lookup or if it can be answered directly.
 
-    Based on your decision, respond with ONLY one of the following words:
-    `ANSWER_DIRECTLY`
+    **Prioritize the CURRENT QUERY'S requirements.** Look for keywords indicating a need for real-time data (weather, stock prices, news, specific events), specific documents (research papers), or information not typically contained in a general knowledge base or prior conversation context.
+
+    Consider the following actions:
+    1.  **Needs Search:** If the **current query** clearly requires accessing external, real-time, or specific information not found in the conversation history. Examples: "What's the weather in Delhi?", "Find papers on LangGraph", "What happened today in the stock market?".
+    2.  **Answer Directly:** If the **current query** is conversational (greetings, thanks), asks for a summary *of the existing conversation history*, or asks a question likely answerable from general knowledge or the provided history ONLY.
+
+    **Output Format:**
+    Respond with ONLY one of the following keywords on the first line:
     `NEEDS_SEARCH`
+    `ANSWER_DIRECTLY`
 
-    If you decide NEEDS_SEARCH, also formulate the best possible, concise search query based on the user's request and conversation history on the next line. Example:
+    If you decide NEEDS_SEARCH, provide the best concise search query based **only on the latest user query** on the second line. Example:
     NEEDS_SEARCH
-    latest advancements in AI regulation Europe
+    Delhi weather today
     """
+    latest_user_query_message = messages[-1] # The current query is the last message
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
-        # Add previous messages for context - keep it concise
-        *messages[-4:-1], # Exclude the *very* last user message if it's the current query
-        ("human", "User Query: {query}")
+        latest_user_query_message
     ])
+    
     llm = get_llm(provider=provider, model=model)
     chain = prompt | llm | StrOutputParser()
 
     try:
-        response = chain.invoke({"query": query})
-        logger.debug(f"Assistant analysis response: {response}")
+        response = chain.invoke({"query": latest_user_query_message.content})
+        logger.debug(f"Assistant analysis raw response:\n{response}") # Log raw response
         lines = response.strip().split('\n')
         decision = lines[0].strip().upper()
-        search_query_formulated = lines[1].strip() if len(lines) > 1 else query # Fallback
+   
+        search_query_formulated = lines[1].strip() if len(lines) > 1 and decision == "NEEDS_SEARCH" else query
 
         if decision == "NEEDS_SEARCH":
-            logger.info("Assistant Decision: Needs Search")
+            logger.info(f"Assistant Decision: Needs Search. Search Query: '{search_query_formulated}'")
+            # IMPORTANT: Ensure you return the potentially updated search_query
             return {"next_step": "needs_search", "search_query": search_query_formulated}
         elif decision == "ANSWER_DIRECTLY":
             logger.info("Assistant Decision: Answer Directly")
@@ -54,11 +61,11 @@ def analyze_query_node(state: GraphState) -> dict:
         else:
              # Fallback if LLM doesn't follow instructions
              logger.warning(f"Assistant analysis failed to produce clear decision ('{decision}'), defaulting to search.")
-             return {"next_step": "needs_search", "search_query": query} # Fallback to search
+             return {"next_step": "needs_search", "search_query": query} # Use original query
 
     except Exception as e:
         logger.error(f"Error during assistant analysis: {e}", exc_info=True)
-        return {"error": f"Failed to analyze query: {e}", "next_step": "needs_search", "search_query": query} # Fallback
+        return {"error": f"Failed to analyze query: {e}", "next_step": "needs_search", "search_query": query}
 
 # --- Node 2: Generate Direct Response ---
 def generate_direct_response_node(state: GraphState) -> dict:
