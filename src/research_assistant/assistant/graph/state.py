@@ -1,5 +1,3 @@
-# src/research_assistant/assistant/graph/state.py
-
 from typing import TypedDict, List, Optional, Dict, Any
 from langchain_core.messages import BaseMessage
 

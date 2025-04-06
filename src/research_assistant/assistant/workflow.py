@@ -1,4 +1,3 @@
-# src/research_assistant/assistant/graph/workflow.py
 import logging
 from langgraph.graph import StateGraph, END
 from research_assistant.assistant.graph.state import GraphState

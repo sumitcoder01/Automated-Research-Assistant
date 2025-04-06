@@ -4,14 +4,9 @@ from research_assistant.assistant.graph.state import GraphState
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.messages import BaseMessage # For type hinting messages
+from langchain_core.messages import BaseMessage 
 
 logger = logging.getLogger(__name__)
-
-# Optional: Define an output schema if you want structured output,
-# but for simple summarization, StrOutputParser is often enough.
-# class SummaryOutput(BaseModel):
-#     summary: str = Field(description="The concise summary of the provided text.")
 
 def format_content_for_summary(state: GraphState) -> str | None:
     """

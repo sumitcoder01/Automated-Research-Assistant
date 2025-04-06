@@ -1,19 +1,12 @@
-# src/research_assistant/deps.py (or main.py / config.py)
 import os
 import logging
-from functools import lru_cache # Optional: Cache the store instance
-
-# Import the base class if you have one
-# from research_assistant.memory.base import BaseSessionStore
-# Import specific implementations
+from functools import lru_cache
 from research_assistant.memory.chroma_store import ChromaSessionStore
 from research_assistant.memory.pinecone_store import PineconeSessionStore
 from research_assistant.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Define BaseSessionStore if you didn't create a base.py
-# This helps with type hinting, but isn't strictly necessary if you duck-type
 from typing import Protocol, List
 from langchain_core.messages import BaseMessage
 
@@ -47,14 +40,3 @@ def get_session_store() -> BaseSessionStore:
     else:
         logger.error(f"Unsupported memory provider specified: {provider}")
         raise ValueError(f"Unsupported memory provider: {provider}")
-
-# If you need a global instance (less flexible than Depends):
-# try:
-#     session_store = get_session_store()
-# except Exception as e:
-#     logger.critical(f"CRITICAL: Failed to initialize session store on startup: {e}")
-#     session_store = None # Or exit
-
-# Ensure FastAPI uses this dependency in endpoints:
-# from research_assistant.api.deps import get_session_store
-# async def handle_query(..., store: BaseSessionStore = Depends(get_session_store)): ...

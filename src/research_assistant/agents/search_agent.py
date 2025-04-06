@@ -1,4 +1,3 @@
-# src/research_assistant/assistant/agents/search_agent.py
 import logging
 from research_assistant.tools.web_search import perform_web_search
 from research_assistant.assistant.graph.state import GraphState

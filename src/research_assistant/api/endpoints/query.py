@@ -1,4 +1,3 @@
-# src/research_assistant/api/endpoints/query.py
 from fastapi import APIRouter, Depends, HTTPException, status
 import logging
 import json
@@ -46,7 +45,7 @@ async def handle_query(
         initial_state: GraphState = {
             "query": user_query,
             "session_id": session_id,
-            "llm_provider": request.llm_provider or "openai", # Default LLM provider for graph
+            "llm_provider": request.llm_provider or "deepseek", # Default LLM provider for graph
             "llm_model": request.llm_model,
             "embedding_provider": embedding_provider_for_session, # Pass this along if needed in graph
             "messages": [user_message],

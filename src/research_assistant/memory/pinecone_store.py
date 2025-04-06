@@ -1,15 +1,12 @@
-# src/research_assistant/memory/pinecone_store.py
 import logging
 import uuid
 import time
 from typing import List, Optional
-from pinecone import Pinecone, Index, PodSpec # Import base Pinecone classes
+from pinecone import Pinecone, Index, PodSpec
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langchain_openai import OpenAIEmbeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from research_assistant.config import settings
-# Optional: Import a base class if you defined one
-# from .base import BaseSessionStore
 
 logger = logging.getLogger(__name__)
 
