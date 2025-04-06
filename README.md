@@ -7,7 +7,7 @@ An intelligent research assistant powered by multiple LLM agents working togethe
 - Multi-agent architecture using LangGraph
 - Web search integration via Tavily
 - Persistent memory using ChromaDB and Pinecone
-- Support for multiple LLM providers (OpenAI, Google Gemini, DeepSeek, anthropic)
+- Support for multiple LLM providers (OpenAI, Google Gemini, DeepSeek, Anthropic)
 - FastAPI-based REST API
 - Comprehensive test suite
 
@@ -15,7 +15,7 @@ An intelligent research assistant powered by multiple LLM agents working togethe
 
 - Python 3.9+
 - Virtual environment (recommended)
-- API keys for LLM providers (e.g., OpenAI, Gemini, DeepSeek, anthropic)
+- API keys for LLM providers (e.g., OpenAI, Gemini, DeepSeek, Anthropic)
 - API key for Tavily (for web search functionality)
 - API key for Pinecone (for vector database)
 
