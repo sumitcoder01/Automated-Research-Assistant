@@ -17,6 +17,8 @@ class GraphState(TypedDict):
 
     # Agent Outputs / Intermediate results
     search_query: Optional[str] # Potentially refined query for search
+    retrieved_context: Optional[str] # Potentially relevant context from VDB
+    summary_request_type: Optional[str] # 'history' or 'content'
     search_results: Optional[List[Dict[str, Any]]]
     summary: Optional[str]
     final_response: Optional[str] # The final generated answer for the user

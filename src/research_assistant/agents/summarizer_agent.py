@@ -9,53 +9,56 @@ logger = logging.getLogger(__name__)
 
 def format_content_for_summary(state: GraphState) -> tuple[str | None, str | None]:
     """
-    Extracts and formats content from the state suitable for summarization.
-    Determines the source (search results or history) and formats accordingly.
+    Extracts and formats content based on the summary request type.
+    Prioritizes message history if summary_request_type is 'history'.
 
     Returns:
         A tuple: (formatted_content, source_type)
-        source_type can be 'search_results', 'message_history', or None.
     """
-    query = state.get("query", "").lower() # Get query for intent check
+    # Check the explicit request type set by the analysis node
+    summary_request_type = state.get("summary_request_type") # 'history' or 'content'
     search_results = state.get("search_results")
-    messages = state.get("messages", []) # History + current query message
+    messages = state.get("messages", [])
     content_to_summarize = ""
     source_type = None
 
-    # Check if the user explicitly asked for a conversation summary
-    is_history_summary_request = "conversation" in query or "history" in query or "previous" in query or "earlier" in query
+    # --- Explicitly use history if requested ---
+    if summary_request_type == "history":
+        logger.info("Summarizer: Explicit request to summarize history detected.")
+        # Exclude the *very last* message (the summary request itself)
+        relevant_history = messages[:-1]
+        if relevant_history:
+            source_type = "message_history"
+            history_str = "\n".join([f"{msg.type}: {msg.content}" for msg in relevant_history if isinstance(msg, BaseMessage)])
+            # Check for minimal history
+            if not history_str.strip():
+                 logger.warning("Summarizer: History summary requested, but formatted history is empty.")
+                 return None, None # Avoid summarizing just the request
+            content_to_summarize = f"The following is the conversation history to be summarized:\n{history_str}"
+        else:
+            # Handle the edge case where the *only* message is the summary request
+            logger.warning("Summarizer: History summary requested, but no prior messages found besides the request itself.")
+            return None, None # No actual history to summarize
 
-    # Prioritize search results UNLESS it's explicitly a history summary request
-    if search_results and isinstance(search_results, list) and not is_history_summary_request:
+    # --- Otherwise (request type is 'content' or None), prioritize search results ---
+    # This covers cases like "summarize these results" or when routing decides summary after search
+    elif search_results and isinstance(search_results, list):
         valid_results = [res for res in search_results if isinstance(res, dict) and 'error' not in res and res.get('snippet')]
         if valid_results:
             logger.info(f"Summarizer: Found {len(valid_results)} valid search results to summarize.")
             source_type = "search_results"
-            # Format results, clearly indicating multiple sources if present
-            formatted_results = "---".join([f"Source {idx+1} (Title: {res.get('title', 'N/A')} | URL: {res.get('link', 'N/A')}):
-{res.get('snippet', 'N/A')}" # Changed 'url' to 'link' based on previous context
+            formatted_results = "\n\n---\n\n".join([
+                f"Source {idx+1} (Title: {res.get('title', 'N/A')} | URL: {res.get('link', 'N/A')}):\n{res.get('snippet', 'N/A')}"
                 for idx, res in enumerate(valid_results)
             ])
-            content_to_summarize = f"The following information was retrieved from web search results:
-{formatted_results}"
+            content_to_summarize = f"The following information was retrieved from web search results:\n{formatted_results}"
         else:
-             logger.warning("Summarizer: Search results found, but they seem empty, lack snippets, or contain errors. Checking history.")
-             # Fall through
+             logger.warning("Summarizer: Content summary likely intended, but search results are empty/invalid.")
+             # Don't fall back to history here unless explicitly requested above
 
-    # Use message history if no valid search results OR if history summary was requested
-    # Exclude the *very last* message, which is the user's current request (e.g., "summarize this")
-    relevant_history = messages[:-1]
-    if not content_to_summarize and relevant_history:
-        logger.info("Summarizer: Using message history for summarization.")
-        source_type = "message_history"
-        # Format the relevant history messages
-        history_str = "
-".join([f"{msg.type}: {msg.content}" for msg in relevant_history if isinstance(msg, BaseMessage)])
-        content_to_summarize = f"The following is from the conversation history:
-{history_str}"
-
+    # Fallback if no history summary was requested and no valid search results exist
     if not content_to_summarize:
-        logger.warning("Summarizer: No suitable content found to summarize (neither search nor history).")
+        logger.warning("Summarizer: No suitable content found to summarize (neither history requested nor valid search results found).")
         return None, None
 
     return content_to_summarize, source_type
@@ -63,24 +66,27 @@ def format_content_for_summary(state: GraphState) -> tuple[str | None, str | Non
 
 def summarize_node(state: GraphState) -> dict:
     """
-    Condenses content (search results or message history) using an LLM.
-    Aims to extract key information, potentially synthesizing from multiple sources if provided.
+    Condenses content based on the determined source (history or search results).
     Updates the 'summary' field in the state.
     """
     logger.info("--- Executing Summarizer Agent Node ---")
     summary_update = {"summary": None, "error": None}
 
-    # 1. Extract and Format Content
+    # 1. Extract and Format Content (Now prioritizes history if requested)
     formatted_content, source_type = format_content_for_summary(state)
 
     if not formatted_content or not source_type:
-        summary_update["summary"] = "No specific content was available to summarize at this step."
-        logger.warning("Summarizer Node: Aborting summary due to lack of content or source type.")
+        # Handle the edge case where history summary was requested but history was empty
+        if state.get("summary_request_type") == "history":
+             summary_update["summary"] = "You asked me to summarize the conversation, but there are no previous messages in our chat history to summarize yet!"
+             logger.warning("Summarizer Node: Responding that history is empty.")
+        else:
+             summary_update["summary"] = "No specific content was available to summarize at this step."
+             logger.warning("Summarizer Node: Aborting summary due to lack of content/source.")
         return summary_update
 
-    # 2. Define Prompt based on Source Type and Content
-    # This prompt is enhanced to guide the LLM better based on requirements
-    prompt_template_str = """You are an expert Content Distiller agent. Your task is to process the provided text and generate a concise, informative summary tailored to the user's likely needs.
+    # 2. Define Prompt (remains largely the same, adaptable to source)
+    prompt_template_str = """You are an expert Content Distiller agent. Your task is to process the provided text ({source_type}) and generate a concise, informative summary tailored to the user's likely needs (context provided by their original query).
 
 **Original User Query Context (The reason this summary was likely requested):**
 {query}
@@ -91,21 +97,21 @@ def summarize_node(state: GraphState) -> dict:
 {context}
 
 **Instructions:**
-1.  **Identify the Core Topic/Question:** What is the main subject or implicit question being addressed in the 'Content to Process'?
-2.  **Extract Key Information:** Identify the most critical facts, findings, arguments, dates, names, or metrics relevant to the core topic and the original user query context.
-3.  **Synthesize (if multiple sources):** If the content comes from multiple search results, synthesize the information. Note similarities, differences, or complementary points if applicable.
+1.  **Identify the Core Topic/Question** based on the content and the original query.
+2.  **Extract Key Information:** Facts, findings, arguments, decisions, main points discussed.
+3.  **Synthesize (if applicable):** If summarizing search results or a long history, group related points.
 4.  **Format the Output:**
-    *   Start with a brief introductory sentence stating the main topic.
-    *   Use **bullet points** for the key extracted information for clarity and readability.
-    *   If the original request seemed simple (like asking for a quick update), you *could* optionally add a **TL;DR** (Too Long; Didn't Read) sentence at the very end summarizing the absolute main point.
+    *   Use clear language.
+    *   Use **bullet points** for key items for readability.
+    *   If summarizing history, capture the flow or key turns of the conversation.
     *   Focus on neutrality and accuracy.
-5.  **Keep it Concise:** The summary should be significantly shorter than the original content while retaining the essential information.
+5.  **Keep it Concise** and significantly shorter than the original.
 
 **Generate the summary below:**
 Summary:
 """
 
-    provider = state.get("llm_provider", "openai") # Use a capable model
+    provider = state.get("llm_provider")
     model = state.get("llm_model")
 
     try:
@@ -119,9 +125,9 @@ Summary:
     chain = prompt | llm | output_parser
 
     try:
-        logger.info(f"Summarizer Node: Invoking LLM ({provider}/{model or 'default'}) for summarization.")
-        original_query = state.get('query', 'User requested a summary') # The query that *led* to summarization
-        
+        logger.info(f"Summarizer Node: Invoking LLM ({provider}/{model or 'default'}) to summarize {source_type}.")
+        original_query = state.get('query', 'User requested a summary')
+
         summary_result = chain.invoke({
             "query": original_query,
             "source_type": source_type,
@@ -129,11 +135,14 @@ Summary:
         })
 
         if isinstance(summary_result, str) and summary_result:
-            # Remove the leading "Summary:" if the LLM includes it
             final_summary = summary_result.strip()
             if final_summary.lower().startswith("summary:"):
                 final_summary = final_summary[len("summary:"):].strip()
-                
+
+            # Add a specific intro if summarizing history
+            if source_type == "message_history":
+                 final_summary = f"Okay, here's a summary of our conversation so far:\n\n{final_summary}"
+
             logger.info("Summarizer Node: Successfully generated summary.")
             summary_update["summary"] = final_summary
         else:
@@ -147,4 +156,9 @@ Summary:
         summary_update["error"] = f"LLM Error: {str(e)}"
 
     logger.info("--- Summarizer Node Finished ---")
+    # The summary is intended as the final response in this case
+    # We need the graph to route from summarizer to END for history summaries.
+    if state.get("summary_request_type") == "history":
+         summary_update["final_response"] = summary_update["summary"]
+
     return summary_update

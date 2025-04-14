@@ -11,51 +11,64 @@ def create_graph():
     workflow = StateGraph(GraphState)
 
     # --- Add Nodes ---
-    # Use the new function names from the refactored agents
-    workflow.add_node("assistant_analyze_route", assistant_agent.analyze_and_route_node) # Renamed node
+    workflow.add_node("assistant_analyze_route", assistant_agent.analyze_and_route_node)
     workflow.add_node("search", search_agent.search_node)
-    workflow.add_node("summarize", summarizer_agent.summarize_node)
+    workflow.add_node("summarize", summarizer_agent.summarize_node) # Single summarizer node
     workflow.add_node("generate_direct_response", assistant_agent.generate_direct_response_node)
-    workflow.add_node("synthesize_response", assistant_agent.synthesize_response_node) # Final response synthesis
+    workflow.add_node("synthesize_response", assistant_agent.synthesize_response_node)
 
     # --- Define Control Flow ---
-
-    # Start with the assistant analyzing and routing the query
     workflow.set_entry_point("assistant_analyze_route")
 
     # --- Conditional Edges from Analysis/Routing ---
-    # This node decides the next step based on user intent and context
     workflow.add_conditional_edges(
-        "assistant_analyze_route", # Source node
-        lambda state: state.get("next_step"), # Decision function based on state output
+        "assistant_analyze_route",
+        lambda state: state.get("next_step"),
         {
-            # Map 'next_step' values to target nodes
             "needs_search": "search",
             "generate_direct_response": "generate_direct_response",
-            "needs_summary": "summarize", # Route directly if analysis decided summary is next
-            "needs_complex_processing": "search", # Start complex tasks with search for now
-        }
+            "summarize_history": "summarize", # NEW: Route history summary requests to summarize
+            "needs_summary": "summarize", # Route content summary requests to summarize
+            "needs_complex_processing": "search",
+            # Fallback could go to search or direct response? Let's keep search.
+        },
+        default="search" # Default path if next_step is unexpected
     )
+
+    # --- Standard Workflow Edges ---
+    # After search, always go to summarize (content summary)
     workflow.add_edge("search", "summarize")
 
-    # After summarizing (or if routed directly to summarize), synthesize the final response
-    workflow.add_edge("summarize", "synthesize_response")
+    # --- Conditional Edges AFTER Summarization ---
+    # Decide whether to synthesize further or end (if it was just a history summary)
+    def after_summary_router(state: GraphState):
+        if state.get("summary_request_type") == "history":
+            # History summary is the final response
+            logger.debug("Routing from Summarize to END (History Summary)")
+            return END
+        else:
+            # Content summary needs synthesis into a final response
+            logger.debug("Routing from Summarize to Synthesize (Content Summary)")
+            return "synthesize_response"
+
+    workflow.add_conditional_edges(
+        "summarize",
+        after_summary_router # Use the new routing function
+        # The mapping dict is implicitly handled by the function returning node names or END
+    )
 
     # --- Edges Leading to END ---
-    # Direct response generation ends the flow
     workflow.add_edge("generate_direct_response", END)
-    # Final synthesis of search/summary results ends the flow
-    workflow.add_edge("synthesize_response", END)
+    workflow.add_edge("synthesize_response", END) # Synthesis is always final
 
     # Compile the graph
-    # Add error handling during compilation if needed
     try:
         graph_app = workflow.compile()
-        logger.info("LangGraph workflow compiled successfully with updated routing.")
+        logger.info("LangGraph workflow compiled successfully with history summary routing.")
         return graph_app
     except Exception as e:
         logger.error(f"Error compiling LangGraph workflow: {e}", exc_info=True)
-        raise # Re-raise the exception to prevent using a potentially broken graph
+        raise
 
-# Create the graph instance when the module is loaded
+# Create the graph instance
 graph_app = create_graph()
