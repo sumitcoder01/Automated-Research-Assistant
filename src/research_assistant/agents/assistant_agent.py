@@ -1,103 +1,165 @@
 import logging
 from research_assistant.llms.provider import get_llm
 from research_assistant.assistant.graph.state import GraphState
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers.string import StrOutputParser
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# --- Node 1: Initial Analysis and Routing ---
-def analyze_query_node(state: GraphState) -> dict:
-    """Analyzes query, decides if direct answer or search is needed."""
-    logger.info("--- Assistant: Analyzing Query Node ---")
+# --- Node 1: Intent Analysis and Routing ---
+def analyze_and_route_node(state: GraphState) -> Dict[str, Any]:
+    """
+    Analyzes the user query, classifies intent, maintains context, performs VDB lookup,
+    and determines the next step (direct answer, search, summarize, etc.).
+    """
+    logger.info("--- Assistant: Analyzing Query and Routing Node ---")
     query = state["query"]
-    messages = state["messages"] # History for context
+    messages = state["messages"]
+    session_id = state.get("session_id")
     provider = state.get("llm_provider")
     model = state.get("llm_model")
+    embedding_provider = state.get("embedding_provider")
 
-    # System prompt to guide the LLM's decision
-    system_prompt = """You are the supervisor agent in a research assistant system. Your *critical task* right now is to analyze the **latest user query** and determine if it requires external information lookup or if it can be answered directly.
+    # --- Vector DB Lookup --- 
+    retrieved_context_str = ""
+    try:
+        # Placeholder for actual retriever implementation
+        logger.debug("Vector DB lookup placeholder active - skipping retrieval.")
+    except Exception as e:
+        logger.error(f"Error during Vector DB lookup for session {session_id}: {e}", exc_info=True)
+        retrieved_context_str = ""
 
-    **Prioritize the CURRENT QUERY'S requirements.** Look for keywords indicating a need for real-time data (weather, stock prices, news, specific events), specific documents (research papers), or information not typically contained in a general knowledge base or prior conversation context.
+    # Limit conversational history 
+    context_window_size = 30
+    context_messages = messages[-context_window_size:]
 
-    Consider the following actions:
-    1.  **Needs Search:** If the **current query** clearly requires accessing external, real-time, or specific information not found in the conversation history. Examples: "What's the weather in Delhi?", "Find papers on LangGraph", "What happened today in the stock market?".
-    2.  **Answer Directly:** If the **current query** is conversational (greetings, thanks), asks for a summary *of the existing conversation history*, or asks a question likely answerable from general knowledge or the provided history ONLY.
+    system_prompt_template = """You are the central orchestrator agent in a research assistant system. Your primary role is to analyze the **latest user query** within the **context of the conversation history** and any **potentially relevant information retrieved from past interactions or FAQs** to determine the most efficient path to fulfill the request.
 
-    **Output Format:**
-    Respond with ONLY one of the following keywords on the first line:
-    `NEEDS_SEARCH`
-    `ANSWER_DIRECTLY`
+**Conversation History:**
+{history}
 
-    If you decide NEEDS_SEARCH, provide the best concise search query based **only on the latest user query** on the second line. Example:
-    NEEDS_SEARCH
-    Delhi weather today
-    """
-    latest_user_query_message = messages[-1] # The current query is the last message
+{retrieved_context}
+
+**Latest User Query:**
+{query}
+
+**Analyze the Latest User Query and Classify Intent (Consider retrieved context):**
+
+1.  **Simple/Direct Interaction:** Greetings, farewells, thanks, clarifications, or questions **directly answered by the 'Potentially Relevant Information' section (if provided)**, general knowledge, or recent history.
+    *If retrieved information provides a sufficient answer, prefer this.* 
+    Action: `ANSWER_DIRECTLY`
+
+2.  **Real-Time Data Request:** Needs current external info (news, weather, stocks). *Retrieved information is unlikely sufficient.*
+    Action: `NEEDS_SEARCH`
+
+3.  **Content Summarization/Extraction Request:** Asks to summarize/extract from *previous* messages or search results. *Check if retrieved information fulfills this, otherwise proceed.*
+    Action: `NEEDS_SUMMARIZATION` (Often follows search)
+
+4.  **Complex Task / Multi-Step Request:** Needs multiple steps (search -> summarize -> analyze). *Retrieved information might inform the task but rarely completes it.*
+    Action: `NEEDS_COMPLEX_PROCESSING`
+
+**Output Format:**
+Respond with ONLY one action keyword (`ANSWER_DIRECTLY`, `NEEDS_SEARCH`, `NEEDS_SUMMARIZATION`, `NEEDS_COMPLEX_PROCESSING`) on the first line.
+If `NEEDS_SEARCH` or `NEEDS_COMPLEX_PROCESSING`, provide the concise search query on the second line.
+If `NEEDS_SUMMARIZATION`, indicate target (e.g., "search results")."""
+
+    formatted_system_prompt = system_prompt_template.format(
+        history="{history}",
+        retrieved_context=retrieved_context_str,
+        query="{query}"
+    )
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        latest_user_query_message
+        ("system", formatted_system_prompt),
+        MessagesPlaceholder(variable_name="history_placeholder"),
     ])
-    
+
     llm = get_llm(provider=provider, model=model)
     chain = prompt | llm | StrOutputParser()
 
     try:
-        response = chain.invoke({"query": latest_user_query_message.content})
-        logger.debug(f"Assistant analysis raw response:\n{response}") # Log raw response
+        response = chain.invoke({
+            "history_placeholder": context_messages,
+            "query": query 
+        })
+        
+        logger.debug(f"Assistant analysis raw response:\n{response}")
         lines = response.strip().split('\n')
         decision = lines[0].strip().upper()
-   
-        search_query_formulated = lines[1].strip() if len(lines) > 1 and decision == "NEEDS_SEARCH" else query
+        details = lines[1].strip() if len(lines) > 1 else ""
+
+        output_state_update = {}
 
         if decision == "NEEDS_SEARCH":
-            logger.info(f"Assistant Decision: Needs Search. Search Query: '{search_query_formulated}'")
-            # IMPORTANT: Ensure you return the potentially updated search_query
-            return {"next_step": "needs_search", "search_query": search_query_formulated}
+            search_query_formulated = details if details else query
+            output_state_update = {"next_step": "needs_search", "search_query": search_query_formulated}
         elif decision == "ANSWER_DIRECTLY":
-            logger.info("Assistant Decision: Answer Directly")
-            return {"next_step": "generate_direct_response"}
+            output_state_update = {"next_step": "generate_direct_response", "retrieved_context": retrieved_context_str or None}
+        elif decision == "NEEDS_SUMMARIZATION":
+            if not state.get("search_results"):
+                output_state_update = {"next_step": "needs_search", "search_query": query}
+            else:
+                output_state_update = {"next_step": "needs_summary"}
+        elif decision == "NEEDS_COMPLEX_PROCESSING":
+            search_query_formulated = details if details else query
+            output_state_update = {"next_step": "needs_search", "search_query": search_query_formulated, "complex_task": True}
         else:
-             # Fallback if LLM doesn't follow instructions
-             logger.warning(f"Assistant analysis failed to produce clear decision ('{decision}'), defaulting to search.")
-             return {"next_step": "needs_search", "search_query": query} # Use original query
+            output_state_update = {"next_step": "needs_search", "search_query": query}
+        
+        return output_state_update
 
     except Exception as e:
-        logger.error(f"Error during assistant analysis: {e}", exc_info=True)
-        return {"error": f"Failed to analyze query: {e}", "next_step": "needs_search", "search_query": query}
+        logger.error(f"Error during assistant analysis LLM call: {e}", exc_info=True)
+        return {"error": f"Failed to analyze query via LLM: {e}", "next_step": "needs_search", "search_query": query}
 
 # --- Node 2: Generate Direct Response ---
-def generate_direct_response_node(state: GraphState) -> dict:
-    """Generates a response directly using the LLM (no search)."""
+def generate_direct_response_node(state: GraphState) -> Dict[str, Any]:
+    """Generates a response directly using the LLM."""
     logger.info("--- Assistant: Generating Direct Response Node ---")
     query = state["query"]
     messages = state["messages"]
     provider = state.get("llm_provider", "openai")
     model = state.get("llm_model")
+    retrieved_context = state.get("retrieved_context")
 
-    # Simple prompt for direct answers/conversation
-    system_prompt = """You are a helpful AI assistant. Respond conversationally to the user's query based on the context provided."""
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        *messages[:-1], # Include history
-        ("human", "{query}")
-    ])
+    context_window_size = 30 
+    context_messages = messages[-context_window_size:]
+
+    if retrieved_context:
+        system_prompt = """You are a helpful AI assistant. The user asked a question, and relevant information was retrieved from past interactions or FAQs. Use this retrieved information *primarily* to answer the user's latest query. Also consider the recent conversation history for context. Be concise and directly address the query using the retrieved info.
+
+**Retrieved Information (Use this first):**
+{retrieved_context}
+
+**Recent Conversation History:** (Includes the user's query as the last message)
+{history}
+
+Respond directly to the user based *primarily* on the retrieved information:"""
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt.format(retrieved_context=retrieved_context, history="{history}")),
+            MessagesPlaceholder(variable_name="history_placeholder"),
+        ])
+    else:
+        system_prompt = """You are a helpful AI assistant. Respond conversationally and directly to the user's latest query based on the provided conversation history and your general knowledge. Be concise and helpful."""
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="history_placeholder"),
+        ])
+    
     llm = get_llm(provider=provider, model=model)
     chain = prompt | llm | StrOutputParser()
 
     try:
-        response = chain.invoke({"query": query})
+        response = chain.invoke({"history_placeholder": context_messages})
         logger.info("Assistant generated direct response.")
-        # Append user query and AI response to messages for next turn? Decide based on state management needs.
-        # For now, just return the final response
         return {"final_response": response.strip()}
     except Exception as e:
         logger.error(f"Error during direct response generation: {e}", exc_info=True)
         return {"error": f"Failed to generate direct response: {e}", "final_response": "Sorry, I encountered an error trying to respond."}
 
 # --- Node 3: Synthesize Response After Search/Summary ---
-def synthesize_response_node(state: GraphState) -> dict:
+def synthesize_response_node(state: GraphState) -> Dict[str, Any]:
     """Generates the final response incorporating search results and/or summary."""
     logger.info("--- Assistant: Synthesizing Response Node ---")
     query = state["query"]
@@ -107,31 +169,63 @@ def synthesize_response_node(state: GraphState) -> dict:
     provider = state.get("llm_provider", "openai")
     model = state.get("llm_model")
 
-    # Build context string
-    context = ""
+    context_window_size = 30 
+    context_messages_for_prompt = messages[-(context_window_size-1):-1]
+
+    context_data = ""
     if summary:
-        context += "Summary of Findings:\n" + summary + "\n\n"
+        context_data += "Summary of Findings:\n" + summary + "\n\n"
     elif search_results:
-         # Format some search results if no summary available
-         context += "Key Search Results:\n"
-         formatted_results = "\n---\n".join([
-            f"Title: {res.get('title', 'N/A')}\nSnippet: {res.get('snippet', 'N/A')}"
-            for res in search_results[:3] # Limit context length
+        context_data += "Key Search Results:\n"
+        formatted_results = "\n---\n".join([
+            f"Title: {res.get('title', 'N/A')}\nURL: {res.get('link', 'N/A')}\nSnippet: {res.get('snippet', 'N/A')}"
+            for res in search_results[:3]
             if isinstance(res, dict) and 'error' not in res
         ])
-         context += formatted_results + "\n\n"
+        context_data += formatted_results + "\n\n"
 
-    system_prompt = """You are a helpful research assistant. Synthesize the provided information (summary and/or search results) to answer the user's original query comprehensively and clearly. Respond directly to the user. If the context is insufficient, state that but provide the best possible answer based on the available information."""
+    if not context_data:
+        context_data = "No specific external context was gathered or summarized for this query."
+        logger.warning("Synthesizing response without search results or summary.")
+
+    system_prompt = """You are a helpful research assistant. Your task is to synthesize the provided information (summary and/or key search results) to answer the user's *original query* comprehensively, clearly, and conversationally.
+
+    **Conversation History (for context):**
+    {history}
+
+    **User's Original Query:**
+    {query}
+
+    **Information Gathered (from Search/Summary):**
+    {context_data}
+
+    **Instructions:**
+    1.  **Directly address** the user's original query using the 'Information Gathered'.
+    2.  **Cite sources** implicitly or explicitly if appropriate.
+    3.  **Frame the response** contextually.
+    4.  If the gathered information is insufficient to fully answer, acknowledge that but provide the best possible answer based on what's available.
+    5.  **Maintain a helpful and conversational tone.**
+    6.  **(Optional) Suggest relevant follow-up questions** or actions the user might be interested in based on the topic and findings."""
+
     prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        *messages[:-1], # History context
-         ("human", "User's Original Query: {query}\n\nAvailable Context:\n{context}\n\nAnswer:")
+        ("system", system_prompt.format(
+            query="{query}", 
+            context_data="{context_data}",
+            history="{history}"
+            )
+        ),
+        MessagesPlaceholder(variable_name="history_placeholder"),
     ])
+
     llm = get_llm(provider=provider, model=model)
     chain = prompt | llm | StrOutputParser()
 
     try:
-        response = chain.invoke({"query": query, "context": context or "No specific context was gathered."})
+        response = chain.invoke({
+            "query": query, 
+            "context_data": context_data,
+            "history_placeholder": context_messages_for_prompt 
+            })
         logger.info("Assistant synthesized final response.")
         return {"final_response": response.strip()}
     except Exception as e:
