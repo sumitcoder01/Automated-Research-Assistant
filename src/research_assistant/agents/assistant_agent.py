@@ -3,10 +3,6 @@ from research_assistant.llms.provider import get_llm
 from research_assistant.assistant.graph.state import GraphState
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessage
 from langchain_core.output_parsers.string import StrOutputParser
-# --- Hypothetical Import for Retriever Access ---
-# Assume this function exists and returns a Langchain retriever interface
-# You MUST implement the logic to get the actual retriever, likely in deps.py or your store module
-# from research_assistant.api.deps import get_vector_store_retriever
 
 logger = logging.getLogger(__name__)
 
@@ -22,31 +18,6 @@ def analyze_and_route_node(state: GraphState) -> dict:
     session_id = state.get("session_id") # Need session_id for potential retriever access
     provider = state.get("llm_provider")
     model = state.get("llm_model")
-    embedding_provider = state.get("embedding_provider") # Needed for retriever
-
-    # --- Vector DB Lookup ---
-    # (Keeping the placeholder as implemented before)
-    retrieved_context_str = ""
-    try:
-        # --- Placeholder for actual retriever implementation ---
-        # Replace this with your actual VDB lookup code
-        # --- Example Structure (Remove pass when implemented) ---
-        # from research_assistant.api.deps import get_vector_store_retriever
-        # retriever = get_vector_store_retriever(session_id=session_id, embedding_provider=embedding_provider)
-        # if retriever:
-        #     relevant_docs = retriever.invoke(query) # or await .ainvoke()
-        #     if relevant_docs:
-        #         # Format docs...
-        #         retrieved_context_str = f"**Potentially Relevant Information...**\n{formatted_docs}\n"
-        #         logger.info(f"Assistant: Found {len(relevant_docs)} relevant docs in Vector DB.")
-        pass # Remove this line when VDB implemented
-        if not retrieved_context_str:
-             logger.debug("Vector DB lookup placeholder active - skipping retrieval.")
-    except ImportError as ie:
-        logger.warning(f"Could not import retriever function: {ie}. Skipping VDB lookup.")
-    except Exception as e:
-        logger.error(f"Error during Vector DB lookup: {e}", exc_info=True)
-        retrieved_context_str = "" # Ensure empty on error
 
     # conversational history
     reversed_messages = list(reversed(messages))
@@ -56,53 +27,57 @@ def analyze_and_route_node(state: GraphState) -> dict:
         f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
         for m in reversed_messages
     )
+    
+ # --- System Prompt Using Query + History Context ---
+    system_prompt_template = """You are the central orchestrator agent in a research assistant system. Your primary role is to analyze the **latest user query** within the context of the **recent conversation history** to determine the most efficient path. Do NOT use external data for this initial classification. Prioritize identifying requests to summarize the conversation history itself.
 
-    # Updated System Prompt including VDB context placeholder AND History Summary Intent
-    system_prompt_template = """You are the central orchestrator agent in a research assistant system. Your primary role is to analyze the **latest user query** within the **context of the conversation history** and any **potentially relevant information retrieved** to determine the most efficient path.
-
-**Conversation History:**
+**Recent Conversation History:**
 {history}
 
-{retrieved_context} {/* VDB results will be injected here (if any) */}
-
-**Latest User Query:**
+**Latest User Query:** (Already included in the history placeholder below)
 {query}
 
-**Analyze the Latest User Query and Classify Intent (Consider retrieved context):**
+**Analyze the Latest User Query (in context of history) and Classify Intent:**
 
-1.  **Summarize Conversation History:** The user explicitly asks to summarize, review, or recall the *current* conversation. Keywords: "summarize conversation", "what did we talk about", "review our discussion", "previous conversation".
+1.  **Conversation History Summary Request:** **(PRIORITY)** The user *explicitly* asks to summarize, review, or recall the *ongoing chat or past conversation itself*. Keywords: "summarize **this conversation**", "**what did we talk about**", "**review our discussion**", "**remind me what we said about**...", "can you give me a summary of **our chat**?", "**summarize the previous conversation**". If the latest query matches this pattern, choose this action.
     Action: `SUMMARIZE_HISTORY`
 
-2.  **Simple/Direct Interaction:** Greetings, farewells, thanks, clarifications, or questions **directly answered by retrieved VDB info**, general knowledge, or *very recent* history (last 1-2 turns).
-    *If VDB info answers it, prefer this.*
+2.  **Simple/Direct Interaction:** The query is a basic greeting ("Hi", "Hello"), farewell ("Bye"), thanks ("Thank you"), a very simple clarification request related *only* to the immediate flow (e.g., "What was that?", "Can you repeat?"), OR a simple follow-up question that can likely be answered from the *immediately preceding* turns in the history.
     Action: `ANSWER_DIRECTLY`
 
-3.  **Real-Time Data Request:** Needs current external info (news, weather, stocks). *VDB/History is unlikely sufficient.*
+3.  **Data Request / Question:** The query asks a factual question that requires external information (news, facts, specific data - e.g., "What is LangChain?", "Who won the election?") OR asks a question that cannot be answered from general knowledge or the provided history and isn't a request to summarize the *conversation* (Rule 1).
     Action: `NEEDS_SEARCH`
 
-4.  **Content Summarization/Extraction Request (Not History):** Asks to summarize/extract from *external* content (e.g., search results just provided, a specific topic requiring search). *Distinguish this from summarizing the conversation itself.*
-    Action: `NEEDS_CONTENT_SUMMARIZATION` (Often follows search)
+4.  **Topic Summarization/Extraction Request:** The user asks to summarize or extract information *about a specific topic, subject, or concept* (e.g., "summarize the plot of Hamlet", "extract the main points about renewable energy", "tell me the key features of LangGraph"). This requires gathering external information first. **This is NOT Rule 1 (Summarizing the conversation).**
+    Action: `NEEDS_SEARCH` (The search results will be summarized later if needed)
 
-5.  **Complex Task / Multi-Step Request:** Needs multiple steps (search -> summarize -> analyze). *VDB/History might inform but rarely completes it.*
+5.  **Complex Task / Multi-Step Request:** The query implies multiple steps beyond a simple search or topic summary (e.g., "compare Python and Java", "analyze the pros and cons of electric cars", "research and write a short report on AI ethics").
     Action: `NEEDS_COMPLEX_PROCESSING`
 
 **Output Format:**
-Respond with ONLY one action keyword (`SUMMARIZE_HISTORY`, `ANSWER_DIRECTLY`, `NEEDS_SEARCH`, `NEEDS_CONTENT_SUMMARIZATION`, `NEEDS_COMPLEX_PROCESSING`) on the first line.
-If `NEEDS Tesla news
-Output:
-NEEDS_SEARCH
-latest Tesla news
-"""
-_SEARCH` or `NEEDS_COMPLEX_PROCESSING`, provide the concise search query on the second line.
-If `NEEDS_CONTENT_SUMMARIZATION`, indicate target (e.g., "search results").
+Respond with ONLY one action keyword (`SUMMARIZE_HISTORY`, `ANSWER_DIRECTLY`, `NEEDS_SEARCH`, `NEEDS_COMPLEX_PROCESSING`) on the first line.
+If `NEEDS_SEARCH` or `NEEDS_COMPLEX_PROCESSING`, provide a concise search query on the second line (often based on the latest user query).
 
-Example (History Summary):
-User Query: Can you summarize our chat so far?
+Example (Conversation History Summary):
+History: User: Tell me about LangGraph. Assistant: [Explains LangGraph]. User: Please summarize our conversation.
+Latest User Query: Please summarize our conversation.
 Output:
 SUMMARIZE_HISTORY
 
-Example (Search):
-User Query: Latest
+Example (Simple Follow-up -> Direct Answer):
+History: User: What is LangGraph? Assistant: It's a framework for building stateful LLM applications. User: Okay, thanks.
+Latest User Query: Okay, thanks.
+Output:
+ANSWER_DIRECTLY
+
+Example (Topic Summary -> Needs Search):
+History: User: Hi Assistant: Hello! User: Can you summarize the theory of relativity?
+Latest User Query: Can you summarize the theory of relativity?
+Output:
+NEEDS_SEARCH
+theory of relativity summary
+"""
+
     # Format the system prompt
     formatted_system_prompt = system_prompt_template.format(
         history="{formatted_history}",
