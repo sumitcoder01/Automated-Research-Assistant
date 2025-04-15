@@ -13,7 +13,7 @@ def create_graph():
     # --- Add Nodes ---
     workflow.add_node("assistant_analyze_route", assistant_agent.analyze_and_route_node)
     workflow.add_node("search", search_agent.search_node)
-    workflow.add_node("summarize", summarizer_agent.summarize_node) # Single summarizer node
+    workflow.add_node("summarize", summarizer_agent.summarize_node) 
     workflow.add_node("generate_direct_response", assistant_agent.generate_direct_response_node)
     workflow.add_node("synthesize_response", assistant_agent.synthesize_response_node)
 
@@ -32,7 +32,6 @@ def create_graph():
             "needs_complex_processing": "search",
             # Fallback could go to search or direct response? Let's keep search.
         },
-        default="search" # Default path if next_step is unexpected
     )
 
     # --- Standard Workflow Edges ---

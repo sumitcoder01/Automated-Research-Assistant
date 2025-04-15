@@ -1,7 +1,7 @@
 # Automated Research Assistant
 
 An intelligent research assistant powered by multiple LLM agents working together to perform comprehensive research tasks.
-
+ 
 ## Features
 
 - Multi-agent architecture using LangGraph
@@ -30,7 +30,7 @@ An intelligent research assistant powered by multiple LLM agents working togethe
 2. Create and activate a virtual environment:
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate # On Windows: venv\Scripts\activate
    ```
 
 3. Install dependencies:
