@@ -20,7 +20,7 @@ except ImportError as e:
 
 # Import API routers AFTER config is potentially loaded
 try:
-    from research_assistant.api.endpoints import query, session
+    from research_assistant.api.endpoints import query, session, documents # Added documents
 except ImportError as e:
      logger.error(f"Failed to import API endpoints: {e}")
      # Decide how to handle this - maybe the app can't start
@@ -33,9 +33,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# --- API Router ---
+# --- API Routers ---
 app.include_router(session.router, prefix="/api/v1/sessions")
 app.include_router(query.router, prefix="/api/v1/query")
+app.include_router(documents.router, prefix="/api/v1/documents") # Added documents router
 
 # --- Root Endpoint ---
 @app.get("/", tags=["Status"])
