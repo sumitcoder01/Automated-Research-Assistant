@@ -64,7 +64,7 @@ class ChromaSessionStore(BaseSessionStore):
 
     # This method also correctly uses the imported get_embedding_function
     def _get_or_create_document_collection(self, session_id: str, embedding_provider_hint: str):
-        collection_name = f"docs_{session_id}"
+        collection_name = session_id
         # --- Combined get/create logic ---
         try:
             collection = self.client.get_collection(name=collection_name)
@@ -184,7 +184,7 @@ class ChromaSessionStore(BaseSessionStore):
             doc_collection = self._get_or_create_document_collection(session_id, embedding_provider_hint=embedding_provider)
 
             ids = [f"doc_{session_id}_{filename}_chunk_{uuid.uuid4()}" for _ in cleaned_chunks]
-            metadatas = [{"role": "sytem", "timestamp": self._get_timestamp()} for i in range(len(cleaned_chunks))]
+            metadatas = [{"role": "system", "timestamp": self._get_timestamp()} for i in range(len(cleaned_chunks))]
 
             logger.info(f"Adding {len(cleaned_chunks)} cleaned chunks from {filename} to document collection '{doc_collection.name}'.")
             doc_collection.add(
