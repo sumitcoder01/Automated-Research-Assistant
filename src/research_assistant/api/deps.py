@@ -1,7 +1,7 @@
 # src/research_assistant/api/deps.py
 import logging
 from functools import lru_cache
-from typing import Union # Add Union type hint
+from typing import Union
 
 # Import the concrete implementations and base protocol
 from research_assistant.memory.chroma_store import ChromaSessionStore
@@ -10,7 +10,7 @@ from research_assistant.memory.base import BaseSessionStore
 from research_assistant.config import settings
 
 # Import low-level clients/indexes
-import chromadb
+from chromadb import Client as ChromaClient, PersistentClient # Import specific Chroma classes
 from pinecone import Pinecone, Index # Import Pinecone and Index
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def get_session_store() -> BaseSessionStore:
 
 # NEW Dependency for low-level backend access
 @lru_cache(maxsize=1)
-def get_vector_store_backend() -> Union[chromadb.Client, Index]:
+def get_vector_store_backend() -> Union[ChromaClient, Index]: # Use ChromaClient in type hint
     """
     Gets the low-level vector store client (Chroma) or index (Pinecone) object
     based on the configured memory_provider. Used for direct operations like
@@ -94,8 +94,8 @@ def get_vector_store_backend() -> Union[chromadb.Client, Index]:
     elif provider == "chroma":
          logger.info(f"Returning ChromaDB client from path: {settings.chroma_path}")
          try:
-             # Return the ChromaDB client instance
-             client = chromadb.PersistentClient(path=settings.chroma_path)
+             # Return the ChromaDB PersistentClient instance
+             client = PersistentClient(path=settings.chroma_path)
              # Perform a quick operation to ensure connectivity (optional but recommended)
              client.heartbeat()
              logger.info(f"ChromaDB client backend initialized successfully at path: {settings.chroma_path}")

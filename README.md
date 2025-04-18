@@ -10,6 +10,7 @@ An intelligent research assistant powered by multiple LLM agents working togethe
 - Support for multiple LLM providers (OpenAI, Google Gemini, DeepSeek, Anthropic)
 - FastAPI-based REST API
 - Comprehensive test suite
+- Document processing using Pytesseract (OCR)
 
 ## Prerequisites
 
@@ -18,6 +19,8 @@ An intelligent research assistant powered by multiple LLM agents working togethe
 - API keys for LLM providers (e.g., OpenAI, Gemini, DeepSeek, Anthropic)
 - API key for Tavily (for web search functionality)
 - API key for Pinecone (for vector database)
+- pytesseract (for OCR-based document processing)
+- poppler-utils (required for PDF to image conversion used in OCR)
 
 ## Installation
 

@@ -3,28 +3,36 @@ from fastapi import FastAPI
 import logging.config
 import os
 
-# --- Logging Configuration (Basic Example) ---
-# For more robust logging, consider a dictionary config or external file
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# --- Logging Configuration ---
+LOG_FILE = "app.log"
+LOG_LEVEL = logging.INFO # Set desired level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+# Configure root logger
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format=LOG_FORMAT,
+    handlers=[
+        logging.FileHandler(LOG_FILE), # Log to a file
+        logging.StreamHandler()      # Also log to console (optional)
+    ]
+)
+
+# Get a logger instance for this module
 logger = logging.getLogger(__name__)
 
 # Apply Langsmith configuration by importing config first
-# This ensures environment variables for Langsmith are set early
 try:
     from research_assistant.config import settings
-    # The print statement about Langsmith status is in config.py
 except ImportError as e:
     logger.error(f"Failed to import settings, configuration might be incomplete: {e}")
-    # Handle missing config gracefully or exit if critical
-    settings = None # Indicate settings are missing
+    settings = None
 
 # Import API routers AFTER config is potentially loaded
 try:
-    from research_assistant.api.endpoints import query, session, documents # Added documents
+    from research_assistant.api.endpoints import query, session, documents
 except ImportError as e:
      logger.error(f"Failed to import API endpoints: {e}")
-     # Decide how to handle this - maybe the app can't start
-
 
 # --- Initialize FastAPI App ---
 app = FastAPI(
@@ -36,7 +44,7 @@ app = FastAPI(
 # --- API Routers ---
 app.include_router(session.router, prefix="/api/v1/sessions")
 app.include_router(query.router, prefix="/api/v1/query")
-app.include_router(documents.router, prefix="/api/v1/documents") # Added documents router
+app.include_router(documents.router, prefix="/api/v1/documents")
 
 # --- Root Endpoint ---
 @app.get("/", tags=["Status"])
@@ -44,33 +52,36 @@ async def read_root():
     """Basic status check endpoint."""
     return {"status": "Automated Research Assistant API is running!"}
 
-# --- Startup / Shutdown Events (Optional) ---
+# --- Startup / Shutdown Events ---
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Application startup...")
-    # Initialize any resources if needed (e.g., database connections if not handled by client libraries)
+    logger.info("-"*20 + " Application Startup " + "-"*20)
     if not settings:
          logger.critical("Settings could not be loaded. Application might not function correctly.")
-    # Ensure ChromaDB path exists? (PersistentClient usually handles this)
-    chroma_dir = getattr(settings, 'chroma_path', './chroma_db')
-    os.makedirs(chroma_dir, exist_ok=True)
-    logger.info(f"Ensured ChromaDB directory exists: {chroma_dir}")
+    # Ensure ChromaDB path exists
+    try:
+        chroma_dir = getattr(settings, 'chroma_path', './chroma_db')
+        os.makedirs(chroma_dir, exist_ok=True)
+        logger.info(f"Ensured ChromaDB directory exists: {chroma_dir}")
+    except Exception as e:
+        logger.error(f"Failed to ensure ChromaDB directory: {e}")
     logger.info("Application startup complete.")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Application shutdown...")
+    logger.info("-"*20 + " Application Shutdown " + "-"*20)
     # Clean up resources if needed
     logger.info("Application shutdown complete.")
 
 
 # --- Run with Uvicorn (for local development) ---
 if __name__ == "__main__":
-    logger.info("Starting Uvicorn server...")
+    logger.info("Starting Uvicorn server for development...")
     uvicorn.run(
-        "src.research_assistant.main:app", # Point to the FastAPI app instance
+        "src.research_assistant.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True, # Enable auto-reload for development
-        log_level="info" # Uvicorn's log level
-        )
+        reload=True,
+        log_level="info" # Uvicorn's log level (controls Uvicorn's own messages)
+        # Note: Python's logging level is set separately above
+    )
