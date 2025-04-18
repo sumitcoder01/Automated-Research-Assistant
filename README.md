@@ -164,6 +164,28 @@ curl -X GET "http://localhost:8000/api/v1/sessions/YOUR_SESSION_ID/history?limit
 }
 ```
 
+### 6. Upload Documents for Contextual Research
+```bash
+curl -X POST http://localhost:8000/api/v1/documents/upload \
+    -H "Content-Type: multipart/form-data" \
+    -F "session_id=your_session_id" \
+    -F "embedding_provider=your_embedding_provider" \
+    -F "files=@/path/to/your/document1.pdf" \
+    -F "files=@/path/to/your/document2.docx"
+```
+**Response:**
+```json
+{
+"extracted_texts": [
+    "this is the extracted text from Document1.pdf. stock market data—whether for real-time tracking, historical analysis, or integration into",
+    "This is the extracted text from Document2.docx. It may include content like:\n- Research methodology and objectives\n- Key insights from survey data\n- Charts or tables (if supported)\n- Citations or reference links\n\nFurther processing could include semantic chunking, embedding generation, or keyword tagging."
+  ],
+  "filenames": [
+    "document1.pdf",
+    "document2.docx"
+  ],
+}
+```
 ---
 
 ## Project Structure
