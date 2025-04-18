@@ -155,7 +155,7 @@ class PineconeSessionStore(BaseSessionStore): # Implement the protocol
             logger.warning(f"No chunks provided for file {filename} in session {session_id}. Skipping storage.")
             return
 
-        namespace = f"docs_{session_id}" # Dedicated namespace for documents
+        namespace = session_id # Dedicated namespace for documents
         logger.info(f"Adding {len(chunks)} chunks from {filename} to Pinecone namespace '{namespace}' using {embedding_provider}.")
 
         try:
@@ -181,17 +181,16 @@ class PineconeSessionStore(BaseSessionStore): # Implement the protocol
                 chunk_id = f"doc_{session_id}_{filename}_chunk_{uuid.uuid4()}"
                 metadata = {
                     "session_id": session_id,
-                    "source": filename,
-                    "chunk_index": i,
+                    "role":"system",
                     "timestamp": current_time,
-                    # Optionally store cleaned chunk content:
-                    # "content": chunk
+                    "content": chunk
                 }
                 vectors_to_upsert.append({
                     "id": chunk_id,
                     "values": embedding,
                     "metadata": metadata
                 })
+                
 
             # Upsert in batches
             batch_size = 100 # Pinecone recommended batch size

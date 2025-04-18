@@ -184,7 +184,7 @@ class ChromaSessionStore(BaseSessionStore):
             doc_collection = self._get_or_create_document_collection(session_id, embedding_provider_hint=embedding_provider)
 
             ids = [f"doc_{session_id}_{filename}_chunk_{uuid.uuid4()}" for _ in cleaned_chunks]
-            metadatas = [{"source": filename, "session_id": session_id, "chunk_index": i, "timestamp": self._get_timestamp()} for i in range(len(cleaned_chunks))]
+            metadatas = [{"role": "sytem", "timestamp": self._get_timestamp()} for i in range(len(cleaned_chunks))]
 
             logger.info(f"Adding {len(cleaned_chunks)} cleaned chunks from {filename} to document collection '{doc_collection.name}'.")
             doc_collection.add(
