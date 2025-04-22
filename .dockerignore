@@ -1,0 +1,60 @@
+# Git files
+.git/
+.gitignore
+
+# Virtual environment
+venv/
+.venv/
+env/
+*.env
+
+# Local secrets (should not be in repo anyway)
+.env
+.env.*
+*.env.prod
+*.env.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.iml
+
+# Test files
+tests/
+pytest.ini
+.pytest_cache/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.so
+*.egg
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Local data / DBs
+*.db
+*.sqlite3
+./chroma_db/ # Exclude local chroma data if it exists
+
+# Logs
+*.log
+
+# Project IDX specific (if any)
+.idx/
+
+# Other
+README.md
+Dockerfile
+docker-compose.yml
+render.yaml
