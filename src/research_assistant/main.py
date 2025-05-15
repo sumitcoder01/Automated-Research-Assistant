@@ -1,5 +1,6 @@
 import uvicorn
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import logging.config
 import os
 
@@ -40,6 +41,19 @@ app = FastAPI(
     description="API for the multi-agent research assistant using LangGraph and Langsmith.",
     version="0.1.0",
 )
+
+origins_to_use = ["*"]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins_to_use,  # List of allowed origins
+    allow_credentials=True,      # Allow cookies to be included in requests
+    allow_methods=["*"],         # Allow all methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],         # Allow all headers
+)
+
+logger.info(f"CORS middleware configured. Allowed origins: {origins_to_use}")
 
 # --- API Routers ---
 app.include_router(session.router, prefix="/api/v1/sessions")
