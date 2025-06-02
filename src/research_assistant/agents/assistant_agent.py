@@ -1,9 +1,16 @@
 import logging
 from research_assistant.llms.provider import get_llm
 from research_assistant.assistant.graph.state import GraphState
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers.string import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from research_assistant.prompts import (
+    SUPERVISOR_INTENT_CLASSIFICATION,
+    ASSISTANT_DIRECT_RESPONSE,
+    ASSISTANT_HISTORY_SUMMARIZATION,
+    ASSISTANT_SYNTHESIS_COMPLEX,
+    ASSISTANT_SYNTHESIS_SIMPLE_SEARCH
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,76 +41,8 @@ def analyze_and_route_node(state: GraphState) -> dict:
     
     if not truncated_history:
         truncated_history = "No previous conversation history."
-    
-    # --- System Prompt for Classification ---
-    system_prompt_template = """You are an intent classification agent. Analyze the **Latest User Query** in the context of the **Recent Conversation History (truncated)** to determine the required action.
 
-**Recent Conversation History (Truncated):**
-{truncated_history}
-
-**Latest User Query:**
-{query}
-
-**Classify the Latest User Query into ONE of the following categories:**
-
-1.  **ANSWER_DIRECTLY:**
-    *   Simple greetings, farewells, thanks.
-    *   General knowledge questions answerable without external search (e.g., "What is 2+2?").
-    *   Questions about the *immediately preceding* turns of the conversation (e.g., User asks question, AI answers, User asks "Can you explain that differently?").
-    *   Explicit requests to summarize the *ongoing conversation history itself* (e.g., "Summarize what we just talked about"). -> Treat this as a direct answer task using history.
-
-2.  **NEEDS_SEARCH:**
-    *   Requires real-time information (e.g., "What's the weather today?", "Latest stock price for GOOGL?", "Current news headlines?").
-    *   Requires specific, up-to-date facts or information *not* likely known by a general LLM or present in the immediate history (e.g., "Details about the latest LangChain library release?", "Who won the recent F1 race?").
-    *   Requires information from external documents or URLs not already processed.
-
-3.  **NEEDS_COMPLEX_PROCESSING:**
-    *   Requires multiple steps beyond a single search query (e.g., "Compare Python and Java features.", "Analyze the pros and cons of electric cars.").
-    *   Involves analysis, synthesis, comparison, evaluation, or generating a structured report based on potentially multiple information sources.
-    *   Requests to summarize information *about a specific topic* that requires external search first (e.g., "Summarize the theory of relativity" - this needs search *then* summarization/synthesis).
-
-**Output Format:**
-Respond with ONLY the chosen classification keyword on the first line (`ANSWER_DIRECTLY`, `NEEDS_SEARCH`, `NEEDS_COMPLEX_PROCESSING`).
-If `NEEDS_SEARCH` or `NEEDS_COMPLEX_PROCESSING`, provide a concise search query on the *second* line, suitable for a web search engine, based *only* on the **Latest User Query**.
-
-**Example 1 (Direct Answer - History Related):**
-History: Human: Tell me about LangGraph... AI: LangGraph is a fram...
-Query: Can you summarize what we just discussed?
-Output:
-ANSWER_DIRECTLY
-
-**Example 2 (Direct Answer - General):**
-History: Human: Hi AI: Hello!
-Query: What is the capital of France?
-Output:
-ANSWER_DIRECTLY
-
-**Example 3 (Needs Search):**
-History: Human: Hi AI: Hello!
-Query: What's the weather in London right now?
-Output:
-NEEDS_SEARCH
-weather in London now
-
-**Example 4 (Complex Processing -> Needs Search First):**
-History: (empty)
-Query: Compare the advantages of solar versus wind power.
-Output:
-NEEDS_COMPLEX_PROCESSING
-advantages solar versus wind power comparison
-
-**Example 5 (Complex Processing -> Topic Summary -> Needs Search First):**
-History: (empty)
-Query: Give me a summary of the main points of the Paris Agreement.
-Output:
-NEEDS_COMPLEX_PROCESSING
-main points Paris Agreement summary
-"""
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt_template),
-        ("human", "Classify the latest user query based on the provided context."),
-    ])
+    prompt = SUPERVISOR_INTENT_CLASSIFICATION
 
     llm = get_llm(provider=provider, model=model)
     chain = prompt | llm | StrOutputParser()
@@ -168,12 +107,8 @@ def generate_direct_response_node(state: GraphState) -> dict:
     context_messages = messages[-context_window_size:]
 
     # Simple system prompt for direct answers
-    system_prompt = """You are a helpful AI assistant. Answer the user's latest query directly and concisely based on the provided conversation history and your general knowledge. If the query asks to summarize the conversation, provide a brief summary of the recent messages (excluding the request itself)."""
 
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        MessagesPlaceholder(variable_name="history_placeholder"),
-    ])
+    prompt = ASSISTANT_DIRECT_RESPONSE
 
     llm = get_llm(provider=provider, model=model)
     chain = prompt | llm | StrOutputParser()
@@ -204,13 +139,8 @@ def summarize_history_node(state: GraphState) -> dict:
 
     history_str = "\n".join([f"{msg.type}: {msg.content}" for msg in history_to_summarize if isinstance(msg, BaseMessage)])
 
-    system_prompt = """You are a summarization assistant. Based ONLY on the provided conversation history, create a concise summary of the main points discussed. Start the summary directly without introductory phrases like "Here is a summary...".
-
-**Conversation History:**
-{history}
-
-**Concise Summary:**"""
-
+    system_prompt = ASSISTANT_HISTORY_SUMMARIZATION
+    
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt.format(history=history_str)),
         # No human message needed as history is in system prompt
@@ -266,38 +196,10 @@ def synthesize_response_node(state: GraphState) -> dict:
 
     # Determine the appropriate system prompt based on task complexity
     if is_complex:
-        system_prompt_template = """You are a helpful research assistant. The user asked a complex question requiring analysis, comparison, or synthesis. You have been provided with relevant context (either summarized findings or raw search results).
-
-**Original User Query:**
-{query}
-
-**Information Gathered:**
-{context_data}
-
-**Task:**
-Synthesize the gathered information to provide a comprehensive answer to the user's original query. Address all parts of the query. Structure your response clearly (e.g., use bullet points for comparisons). Ensure the response is based on the provided information.
-
-**Recent Conversation History (for context):**
-{history}
-
-**Final Answer:**"""
+        system_prompt_template = ASSISTANT_SYNTHESIS_COMPLEX
         logger.info("Using synthesis prompt for complex task.")
     else: # Simple search result presentation
-         system_prompt_template = """You are a helpful research assistant. The user asked a question that required a web search. You have been provided with relevant context (either summarized findings or raw search results).
-
-**Original User Query:**
-{query}
-
-**Information Found:**
-{context_data}
-
-**Task:**
-Answer the user's query directly using the information found. Be concise and focus on the key findings relevant to the query. If summarizing results, state that clearly.
-
-**Recent Conversation History (for context):**
-{history}
-
-**Final Answer:**"""
+         system_prompt_template = ASSISTANT_SYNTHESIS_SIMPLE_SEARCH
          logger.info("Using synthesis prompt for simple search task.")
 
     # Format history for the synthesis prompt (limit length)
