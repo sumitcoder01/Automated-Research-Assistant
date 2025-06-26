@@ -1,49 +1,33 @@
-# --- Stage 1: Builder ---
-FROM python:3.11-slim as builder
+# Use an official slim Python image
+FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app/src
 
+# Set working directory
+WORKDIR /app
+
+# Install OS dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tesseract-ocr \
         poppler-utils \
         build-essential \
         gcc \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-
-# --- Stage 2: Final Production Image ---
-FROM python:3.11-slim
-
-WORKDIR /app
-
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        tesseract-ocr \
-        poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /opt/venv /opt/venv
+# Copy application source code
 COPY ./src ./src
 
-ENV PATH="/opt/venv/bin:$PATH"
-
-ENV PYTHONPATH=/app
-
+# Expose FastAPI default port
 EXPOSE 8000
 
-# --- Run Uvicorn Directly ---
+# Launch Uvicorn server
 CMD ["uvicorn", "src.research_assistant.main:app", "--host", "0.0.0.0", "--port", "8000"]
